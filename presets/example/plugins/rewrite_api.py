@@ -1,6 +1,7 @@
 """Example plugin: rewrite a JSON API request."""
 
-from clearclassnet import RequestEvent, ResponseEvent, Rule, on_request, on_response
+from clearclassnet.dispatch import Rule, on_request, on_response
+from clearclassnet.event import RequestEvent, ResponseEvent
 
 
 @on_request(Rule.method("POST") & Rule.path("/api/*"))

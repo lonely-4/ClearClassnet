@@ -12,10 +12,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from clearclassnet.event.body import BodyBuffer
 from clearclassnet.event.headers import HeaderMap
+from clearclassnet.response import Response
 
 
 class Decision(Enum):
@@ -60,8 +61,8 @@ class RequestMessage:
     http_version: str = "1.1"
 
     @property
-    def url(self) -> str:
-        return format_url(self.scheme, self.host, self.port, self.path, self.query)
+    def url(self) -> URL:
+        return URL(format_url(self.scheme, self.host, self.port, self.path, self.query), self.query)
 
     @property
     def target_path(self) -> str:
@@ -101,7 +102,7 @@ class RequestEvent:
         self._stop = False
         self._synthetic_status = 200
         self._synthetic_headers = HeaderMap()
-        self._synthetic_body = b""
+        self._synthetic_body: bytes | Response = b""
 
     @property
     def meta(self) -> dict[str, Any]:
@@ -132,7 +133,7 @@ class RequestEvent:
         return self.flow.request.query
 
     @property
-    def url(self) -> str:
+    def url(self) -> URL:
         return self.flow.request.url
 
     @property
@@ -168,7 +169,7 @@ class RequestEvent:
 
     def reject(
         self,
-        status: int = 403,
+        status: int | Response = 403,
         headers: Mapping[str, str] | None = None,
         body: bytes | str = b"",
     ) -> None:
@@ -177,14 +178,23 @@ class RequestEvent:
 
     def respond(
         self,
-        status: int = 200,
+        status: int | Response = 200,
         headers: Mapping[str, str] | None = None,
         body: bytes | str = b"",
         *,
         json: Any = None,
         text: str | None = None,
     ) -> None:
-        """Return a synthetic response and do not contact the upstream server."""
+        """Return a synthetic response and do not contact the upstream server.
+
+        Pass a `clearclassnet.response.Response` as `status`, or build one
+        from `status`, `headers`, `body`, `json`, or `text`.
+        """
+        if isinstance(status, Response):
+            if headers or body or json is not None or text is not None:
+                raise TypeError("a Response replaces status, headers, and body")
+            self._install(status)
+            return
         payload, extra = _payload(body=body, json_body=json, text=text)
         merged = HeaderMap(headers.items() if headers else ())
         for key, value in extra:
@@ -194,6 +204,13 @@ class RequestEvent:
         self._synthetic_status = status
         self._synthetic_headers = merged
         self._synthetic_body = payload
+        self._stop = True
+
+    def _install(self, response: Response) -> None:
+        self._decision = Decision.RESPOND
+        self._synthetic_status = response.status_code
+        self._synthetic_headers = response.headers
+        self._synthetic_body = response if response.stream else response.body
         self._stop = True
 
     def rewrite(
@@ -219,7 +236,7 @@ class RequestEvent:
             message.headers.update(headers)
         _replace_body(message.body, message.headers, body=body, json_body=json, text=text)
 
-    def synthetic_response(self) -> tuple[int, HeaderMap, bytes] | None:
+    def synthetic_response(self) -> tuple[int, HeaderMap, bytes | Response] | None:
         if self._decision is not Decision.RESPOND:
             return None
         return (self._synthetic_status, self._synthetic_headers, self._synthetic_body)
@@ -274,7 +291,7 @@ class ResponseEvent:
         return self.flow.request.path
 
     @property
-    def url(self) -> str:
+    def url(self) -> URL:
         return self.flow.request.url
 
     @property
@@ -372,6 +389,39 @@ class ConnectEvent:
         self._reject_status = status
         self._reject_body = _as_bytes(body)
         self._stop = True
+
+
+class QueryParams:
+    """Decoded query string. `get` returns the first value for a key."""
+
+    def __init__(self, raw: str) -> None:
+        self._raw = raw
+        self._items = parse_qs(raw, keep_blank_values=True)
+
+    def get(self, key: str, default: str = "") -> str:
+        values = self._items.get(key)
+        if not values:
+            return default
+        return values[0]
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and key in self._items
+
+    def __str__(self) -> str:
+        return self._raw
+
+
+class URL(str):
+    """Request URL that still behaves as a string and exposes `query`."""
+
+    def __new__(cls, value: str, query: str) -> URL:
+        obj = str.__new__(cls, value)
+        obj._query = query
+        return obj
+
+    @property
+    def query(self) -> QueryParams:
+        return QueryParams(self._query)
 
 
 def format_url(scheme: str, host: str, port: int, path: str, query: str) -> str:

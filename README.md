@@ -10,7 +10,7 @@
 uv sync --all-groups
 uv run clearclassnet ca export --out clearclassnet-ca.pem
 uv run clearclassnet ca install
-uv run clearclassnet run --config examples/clearclassnet.toml
+uv run clearclassnet run --config presets/example/clearclassnet.toml
 ```
 
 `ca install` 会把本地 CA 装进当前用户的信任库。未信任该 CA 的程序无法完成 HTTPS 解密，流量会在握手阶段失败。
@@ -20,7 +20,8 @@ uv run clearclassnet run --config examples/clearclassnet.toml
 ## 写一个插件
 
 ```python
-from clearclassnet import RequestEvent, Rule, on_request
+from clearclassnet.dispatch import Rule, on_request
+from clearclassnet.event import RequestEvent
 
 @on_request(Rule.host("*.example.com"), priority=10)
 async def block(event: RequestEvent):

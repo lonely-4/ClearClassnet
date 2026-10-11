@@ -13,7 +13,14 @@ flowchart LR
   upstream -->|ResponseEvent| bus
 ```
 
-核心不包含黑名单、课表或页面文案。插件通过公开事件做出决定：
+核心不包含黑名单、课表或页面文案。插件通过公开模块使用事件：
+
+- `clearclassnet.event`：`RequestEvent`、`ResponseEvent`、`ConnectEvent`。
+- `clearclassnet.dispatch`：`Rule`，以及 `on_request`、`on_response`、`on_connect`。
+- `clearclassnet.response`：`HTMLResponse` 等合成响应。
+- `clearclassnet.config.plugin_config`：读取本插件的配置表。
+
+事件上的操作：
 
 - `RequestEvent`：`allow`、`reject`、`rewrite`、`respond`，以及 `bytes` / `text` / `json`。
 - `ResponseEvent`：`allow`、`rewrite`。请求和响应共享 `flow.meta`。

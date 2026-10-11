@@ -37,3 +37,11 @@ def test_custom_rule() -> None:
 
 def test_fnmatch_is_what_host_rules_use() -> None:
     assert fnmatch("www.douyin.com", "*.douyin.com")
+
+
+def test_url_query_get_decodes_the_first_value() -> None:
+    event = request_event(path="/search", query="keyword=%E6%B5%8B%E8%AF%95&page=2")
+    assert event.url.query.get("keyword", "") == "测试"
+    assert event.url.query.get("missing", "") == ""
+    assert str(event.url).endswith("/search?keyword=%E6%B5%8B%E8%AF%95&page=2")
+    assert event.url.casefold() == str(event.url).casefold()

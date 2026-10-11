@@ -119,8 +119,15 @@ async def _read_http_message(
             return None
         buffer += chunk
     head, _, rest = buffer.partition(b"\r\n\r\n")
+    header_lines = head.decode("latin-1").split("\r\n")[1:]
+    if any(
+        line.lower().startswith("transfer-encoding:") and "chunked" in line.lower()
+        for line in header_lines
+    ):
+        body, rest = await _read_chunked(reader, rest)
+        return head, body, rest
     length = 0
-    for line in head.decode("latin-1").split("\r\n")[1:]:
+    for line in header_lines:
         if line.lower().startswith("content-length:"):
             length = int(line.split(":", 1)[1].strip())
     while len(rest) < length:
@@ -129,3 +136,31 @@ async def _read_http_message(
             break
         rest += chunk
     return head, rest[:length], rest[length:]
+
+
+async def _read_chunked(reader: asyncio.StreamReader, buffer: bytes) -> tuple[bytes, bytes]:
+    body = bytearray()
+    while True:
+        while b"\r\n" not in buffer:
+            chunk = await reader.read(65536)
+            if not chunk:
+                raise AssertionError("truncated chunked body")
+            buffer += chunk
+        line, _, buffer = buffer.partition(b"\r\n")
+        size = int(line.split(b";", 1)[0], 16)
+        if size == 0:
+            while b"\r\n\r\n" not in buffer:
+                chunk = await reader.read(65536)
+                if not chunk:
+                    break
+                buffer += chunk
+            _, _, buffer = buffer.partition(b"\r\n\r\n")
+            return bytes(body), buffer
+        while len(buffer) < size + 2:
+            chunk = await reader.read(65536)
+            if not chunk:
+                raise AssertionError("truncated chunk")
+            buffer += chunk
+        body.extend(buffer[:size])
+        buffer = buffer[size + 2 :]
+

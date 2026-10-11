@@ -1,3 +1,5 @@
+# uv run clearclassnet run --config presets/example/clearclassnet.toml
+
 [proxy]
 host = "127.0.0.1"
 port = 8899
@@ -8,15 +10,15 @@ timeout = 30
 level = "INFO"
 
 [plugins]
-dirs = ["examples/plugins"]
+dirs = ["presets/example/plugins"]
 builtins = true
 disabled = []
 
 [plugins.audit]
-path = "audit.jsonl"
+path = "presets/example/audit.jsonl"
 
 [plugins.blocklist]
-path = "blocklist.txt"
+path = "presets/example/blocklist.txt"
 
 [plugins.mitm_policy]
 include = ["*"]

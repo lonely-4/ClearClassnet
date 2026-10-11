@@ -12,9 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from clearclassnet.config import plugin_config
-from clearclassnet.dispatch.matcher import on_request, on_response
-from clearclassnet.dispatch.rule import Rule
-from clearclassnet.event.http import RequestEvent, ResponseEvent
+from clearclassnet.dispatch import Rule, on_request, on_response
+from clearclassnet.event import RequestEvent, ResponseEvent
 
 log = logging.getLogger("clearclassnet.audit")
 
@@ -43,7 +42,7 @@ def _record(
         "time": datetime.now(UTC).isoformat(),
         "phase": phase,
         "method": method,
-        "url": url,
+        "url": str(url),
         "status": status,
         "client": f"{client[0]}:{client[1]}",
     }

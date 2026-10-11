@@ -8,6 +8,7 @@ from clearclassnet.dispatch.rule import Rule
 from clearclassnet.event.errors import BodyUnavailable
 from clearclassnet.event.http import ConnectEvent, RequestEvent, ResponseEvent
 from clearclassnet.proxy.engine import ProxyEngine
+from clearclassnet.response import FileResponse, HTMLResponse, StreamingResponse
 from clearclassnet.tls.ca import CertificateAuthority
 from tests.helpers import Origin, open_proxy, proxy_config, read_response
 
@@ -76,6 +77,50 @@ async def test_reject_and_respond_do_not_contact_origin(tmp_path) -> None:
         status, body = await _proxy_get(proxy_port, port, "/fake")
         assert status == 200
         assert body == b'{"ok":true}'
+    finally:
+        await engine.close()
+        await origin.close()
+    assert origin.connections == 0
+
+
+@pytest.mark.asyncio
+async def test_response_objects_are_written_to_the_client(tmp_path) -> None:
+    origin = Origin()
+    port = await origin.start()
+    page = tmp_path / "page.html"
+    page.write_text("<p>file</p>", encoding="utf-8")
+
+    @on_request(Rule.path("/html"))
+    async def html(event: RequestEvent) -> None:
+        event.respond(HTMLResponse("<h1>Blocked</h1>", status_code=403))
+
+    @on_request(Rule.path("/stream"))
+    async def stream(event: RequestEvent) -> None:
+        async def chunks():
+            yield b"abc"
+            yield b"def"
+
+        event.respond(StreamingResponse(chunks(), media_type="text/plain"))
+
+    @on_request(Rule.path("/file"))
+    async def file(event: RequestEvent) -> None:
+        event.respond(FileResponse(page, media_type="text/html"))
+
+    engine = ProxyEngine(proxy_config(), CertificateAuthority(tmp_path))
+    proxy_port = await open_proxy(engine)
+    try:
+        status, headers, body = await _proxy_get_headers(proxy_port, port, "/html")
+        assert status == 403
+        assert headers["content-type"].startswith("text/html")
+        assert body == b"<h1>Blocked</h1>"
+        status, headers, body = await _proxy_get_headers(proxy_port, port, "/stream")
+        assert status == 200
+        assert "chunked" in headers["transfer-encoding"]
+        assert body == b"abcdef"
+        status, headers, body = await _proxy_get_headers(proxy_port, port, "/file")
+        assert status == 200
+        assert headers["content-length"] == str(len(body))
+        assert body == b"<p>file</p>"
     finally:
         await engine.close()
         await origin.close()
@@ -248,6 +293,13 @@ async def test_websocket_upgrade_is_relayed(tmp_path) -> None:
 
 
 async def _proxy_get(proxy_port: int, origin_port: int, path: str) -> tuple[int, bytes]:
+    status, _headers, body = await _proxy_get_headers(proxy_port, origin_port, path)
+    return status, body
+
+
+async def _proxy_get_headers(
+    proxy_port: int, origin_port: int, path: str
+) -> tuple[int, dict[str, str], bytes]:
     reader, writer = await asyncio.open_connection("127.0.0.1", proxy_port)
     writer.write(
         (
@@ -258,10 +310,10 @@ async def _proxy_get(proxy_port: int, origin_port: int, path: str) -> tuple[int,
         ).encode()
     )
     await writer.drain()
-    status, _headers, body = await read_response(reader)
+    status, headers, body = await read_response(reader)
     writer.close()
     await writer.wait_closed()
-    return status, body
+    return status, headers, body
 
 
 async def _connect_get(proxy_port: int, origin_port: int, context: ssl.SSLContext) -> bytes:

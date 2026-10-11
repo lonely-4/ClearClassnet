@@ -1,4 +1,8 @@
-"""Rule, matcher, and event dispatch."""
+"""Public matcher registration.
+
+Import `Rule` and `on_request` / `on_response` / `on_connect` from this package.
+The bus and registry underneath stay internal.
+"""
 
 from clearclassnet.dispatch.bus import dispatch
 from clearclassnet.dispatch.matcher import Matcher, on_connect, on_request, on_response

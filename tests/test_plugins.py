@@ -82,9 +82,8 @@ async def test_mitm_policy_exclude_wins() -> None:
 def test_loader_skips_disabled_builtins_and_loads_a_directory(tmp_path: Path) -> None:
     plugin = tmp_path / "sample.py"
     plugin.write_text(
-        "from clearclassnet.dispatch.matcher import on_request\n"
-        "from clearclassnet.dispatch.rule import Rule\n"
-        "from clearclassnet.event.http import RequestEvent\n"
+        "from clearclassnet.dispatch import Rule, on_request\n"
+        "from clearclassnet.event import RequestEvent\n"
         "@on_request(Rule.host('loaded.test'))\n"
         "async def mark(event: RequestEvent) -> None:\n"
         "    event.flow.meta['loaded'] = True\n",

@@ -39,6 +39,7 @@ from clearclassnet.proxy.framing import (
 from clearclassnet.proxy.io import next_event, read_body
 from clearclassnet.proxy.tunnel import relay
 from clearclassnet.proxy.upstream import UpstreamSession
+from clearclassnet.response import Response as PluginResponse
 
 if TYPE_CHECKING:
     from clearclassnet.proxy.engine import ProxyEngine
@@ -331,14 +332,20 @@ class ClientConnection:
         protocol: h11.Connection,
         status: int,
         headers: HeaderMap,
-        body: bytes | BodyBuffer,
+        body: bytes | BodyBuffer | PluginResponse,
         *,
         method: str,
         force_close: bool,
     ) -> bool:
         send_body = method != "HEAD" and status not in _NO_BODY and status >= 200
         declare_length = send_body or method == "HEAD"
-        size = len(body) if isinstance(body, bytes) else body.size
+        if isinstance(body, bytes):
+            size: int | None = len(body)
+        elif isinstance(body, BodyBuffer):
+            size = body.size
+        else:
+            declared = body.headers.get("Content-Length")
+            size = int(declared) if declared is not None else None
         outbound = forwarding_headers(
             headers,
             body_size=size if declare_length and status not in _NO_BODY else None,
@@ -355,16 +362,17 @@ class ClientConnection:
             )
         )
         if send_body:
-            chunks: list[bytes]
-            if isinstance(body, bytes):
-                chunks = [body] if body else []
-            elif isinstance(body, BodyBuffer):
-                chunks = list(body.iter_chunks())
+            if isinstance(body, PluginResponse):
+                async for chunk in body.iter_bytes():
+                    if chunk:
+                        self.writer.write(protocol.send(h11.Data(data=chunk)))
+            elif isinstance(body, bytes):
+                if body:
+                    self.writer.write(protocol.send(h11.Data(data=body)))
             else:
-                raise TypeError(f"unsupported body type: {type(body).__name__}")
-            for chunk in chunks:
-                if chunk:
-                    self.writer.write(protocol.send(h11.Data(data=chunk)))
+                for chunk in body.iter_chunks():
+                    if chunk:
+                        self.writer.write(protocol.send(h11.Data(data=chunk)))
         self.writer.write(protocol.send(h11.EndOfMessage()))
         await self.writer.drain()
         return (

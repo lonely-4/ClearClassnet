@@ -10,9 +10,8 @@ from __future__ import annotations
 from fnmatch import fnmatch
 
 from clearclassnet.config import plugin_config
-from clearclassnet.dispatch.matcher import on_connect
-from clearclassnet.dispatch.rule import Rule
-from clearclassnet.event.http import ConnectEvent
+from clearclassnet.dispatch import Rule, on_connect
+from clearclassnet.event import ConnectEvent
 
 
 def register() -> None:

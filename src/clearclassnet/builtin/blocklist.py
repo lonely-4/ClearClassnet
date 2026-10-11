@@ -11,9 +11,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from clearclassnet.config import plugin_config
-from clearclassnet.dispatch.matcher import on_request
-from clearclassnet.dispatch.rule import Rule
-from clearclassnet.event.http import RequestEvent
+from clearclassnet.dispatch import Rule, on_request
+from clearclassnet.event import RequestEvent
 
 _cache_key: tuple[str, int] | None = None
 _patterns: list[str] = []
