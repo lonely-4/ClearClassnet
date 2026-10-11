@@ -8,6 +8,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from clearclassnet.autostart import disable_autostart, enable_autostart
 from clearclassnet.config import config_dir, load_config, set_config
 from clearclassnet.dispatch.registry import get_registry
 from clearclassnet.log import setup_logging
@@ -41,6 +42,18 @@ def main(argv: list[str] | None = None) -> None:
         conflict_handler="resolve",
     )
 
+    auto = sub.add_parser(
+        "autostart",
+        help="start the proxy at logon on Windows, with no console window",
+        parents=[config_parser],
+        conflict_handler="resolve",
+    )
+    auto.add_argument(
+        "--disable",
+        action="store_true",
+        help="remove the logon registration",
+    )
+
     ca = sub.add_parser("ca", help="manage the local certificate authority")
     ca_sub = ca.add_subparsers(dest="ca_command", required=True)
     export_parser = ca_sub.add_parser("export", help="copy the CA certificate")
@@ -54,6 +67,8 @@ def main(argv: list[str] | None = None) -> None:
         _run(config)
     elif args.command == "check":
         _check(config)
+    elif args.command == "autostart":
+        _autostart(config, disable=args.disable)
     elif args.command == "ca":
         _ca(args.ca_command, getattr(args, "out", None))
 
@@ -87,6 +102,15 @@ def _check(config_path: str | None) -> None:
     set_config(config)
     load_plugins(config)
     print(format_matchers())
+
+
+def _autostart(config_path: str | None, *, disable: bool) -> None:
+    if disable:
+        disable_autostart()
+        print("autostart removed")
+        return
+    launcher = enable_autostart(config_path)
+    print(f"autostart registered: {launcher}")
 
 
 def _ca(command: str, out: Path | None) -> None:
