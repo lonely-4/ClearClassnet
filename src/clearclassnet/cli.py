@@ -8,7 +8,12 @@ import shutil
 import sys
 from pathlib import Path
 
-from clearclassnet.autostart import disable_autostart, enable_autostart
+from clearclassnet.autostart import (
+    install_autostart,
+    start_background,
+    stop_background,
+    uninstall_autostart,
+)
 from clearclassnet.config import config_dir, load_config, set_config
 from clearclassnet.dispatch.registry import get_registry
 from clearclassnet.log import setup_logging
@@ -42,17 +47,21 @@ def main(argv: list[str] | None = None) -> None:
         conflict_handler="resolve",
     )
 
-    auto = sub.add_parser(
-        "autostart",
-        help="start the proxy at logon on Windows, with no console window",
+    start = sub.add_parser(
+        "start",
+        help="run the proxy in the background on Windows",
         parents=[config_parser],
         conflict_handler="resolve",
     )
-    auto.add_argument(
-        "--disable",
-        action="store_true",
-        help="remove the logon registration",
+    start.add_argument("--cwd", type=Path, help=argparse.SUPPRESS)
+    sub.add_parser("stop", help="stop the background proxy on Windows")
+    sub.add_parser(
+        "install",
+        help="register the background proxy to start at logon on Windows",
+        parents=[config_parser],
+        conflict_handler="resolve",
     )
+    sub.add_parser("uninstall", help="remove the Windows logon registration")
 
     ca = sub.add_parser("ca", help="manage the local certificate authority")
     ca_sub = ca.add_subparsers(dest="ca_command", required=True)
@@ -67,8 +76,14 @@ def main(argv: list[str] | None = None) -> None:
         _run(config)
     elif args.command == "check":
         _check(config)
-    elif args.command == "autostart":
-        _autostart(config, disable=args.disable)
+    elif args.command == "start":
+        _start(config, getattr(args, "cwd", None))
+    elif args.command == "stop":
+        _stop()
+    elif args.command == "install":
+        _install(config)
+    elif args.command == "uninstall":
+        _uninstall()
     elif args.command == "ca":
         _ca(args.ca_command, getattr(args, "out", None))
 
@@ -104,13 +119,27 @@ def _check(config_path: str | None) -> None:
     print(format_matchers())
 
 
-def _autostart(config_path: str | None, *, disable: bool) -> None:
-    if disable:
-        disable_autostart()
-        print("autostart removed")
+def _start(config_path: str | None, cwd: Path | None) -> None:
+    pid = start_background(config_path, cwd=cwd)
+    print(f"proxy started in the background ({pid})")
+
+
+def _stop() -> None:
+    pid = stop_background()
+    if pid is None:
+        print("proxy is not running")
         return
-    launcher = enable_autostart(config_path)
-    print(f"autostart registered: {launcher}")
+    print(f"proxy stopped ({pid})")
+
+
+def _install(config_path: str | None) -> None:
+    command = install_autostart(config_path)
+    print(f"logon autostart registered: {command}")
+
+
+def _uninstall() -> None:
+    uninstall_autostart()
+    print("logon autostart removed")
 
 
 def _ca(command: str, out: Path | None) -> None:
