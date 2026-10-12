@@ -91,3 +91,15 @@ Rule.custom(lambda event: event.path.startswith("/admin"), "admin")
 ```
 
 内置规则有 `Rule.all`、`host`、`method`、`path`、`scheme`、`port`。`host` 和 `path` 使用 `fnmatch`，`*.example.com` 不匹配 `example.com` 本身。`Rule.host` 也可以直接传入一组模式，命中其中任意一个即可。
+
+## 向外发请求
+
+插件里不要用会读取系统代理的客户端。`clearclassnet.httpx` 提供两个已经关掉环境代理和系统代理的客户端，请求会直接连接目标，不会再绕回本进程：
+
+```python
+from clearclassnet.httpx import httpx, httpxAsync
+
+httpx.get("https://example.com")
+await httpxAsync.get("https://example.com")
+```
+
