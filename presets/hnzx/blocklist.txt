@@ -1,7 +1,0 @@
-# Host patterns for the hnzx preset. Lines without a slash match the host.
-# *.example.com does not match the apex, so list both.
-
-poki.com
-*.poki.com
-poki.cn
-*.poki.cn
