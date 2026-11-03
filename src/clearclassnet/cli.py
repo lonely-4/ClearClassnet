@@ -19,6 +19,7 @@ from clearclassnet.dispatch.registry import get_registry
 from clearclassnet.log import setup_logging
 from clearclassnet.plugin import load_plugins
 from clearclassnet.proxy.engine import ProxyEngine
+from clearclassnet.system_proxy import run_guard
 from clearclassnet.tls.ca import CertificateAuthority
 from clearclassnet.tls.store import install_trust, linux_followup, trust_command
 
@@ -54,14 +55,32 @@ def main(argv: list[str] | None = None) -> None:
         conflict_handler="resolve",
     )
     start.add_argument("--cwd", type=Path, help=argparse.SUPPRESS)
+    start.add_argument(
+        "-d",
+        "--daemon",
+        action="store_true",
+        help="also keep the Windows system proxy pointed at this proxy",
+    )
     sub.add_parser("stop", help="stop the background proxy on Windows")
-    sub.add_parser(
+    install = sub.add_parser(
         "install",
         help="register the background proxy to start at logon on Windows",
         parents=[config_parser],
         conflict_handler="resolve",
     )
+    install.add_argument(
+        "-d",
+        "--daemon",
+        action="store_true",
+        help="autostart also keeps the Windows system proxy pointed at this proxy",
+    )
     sub.add_parser("uninstall", help="remove the Windows logon registration")
+    guard = sub.add_parser(
+        "proxy-guard",
+        help="reapply the Windows system proxy until this process is stopped",
+    )
+    guard.add_argument("--host", required=True)
+    guard.add_argument("--port", type=int, required=True)
 
     ca = sub.add_parser("ca", help="manage the local certificate authority")
     ca_sub = ca.add_subparsers(dest="ca_command", required=True)
@@ -77,13 +96,15 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "check":
         _check(config)
     elif args.command == "start":
-        _start(config, getattr(args, "cwd", None))
+        _start(config, getattr(args, "cwd", None), daemon=args.daemon)
     elif args.command == "stop":
         _stop()
     elif args.command == "install":
-        _install(config)
+        _install(config, daemon=args.daemon)
     elif args.command == "uninstall":
         _uninstall()
+    elif args.command == "proxy-guard":
+        run_guard(args.host, args.port)
     elif args.command == "ca":
         _ca(args.ca_command, getattr(args, "out", None))
 
@@ -119,8 +140,8 @@ def _check(config_path: str | None) -> None:
     print(format_matchers())
 
 
-def _start(config_path: str | None, cwd: Path | None) -> None:
-    pid = start_background(config_path, cwd=cwd)
+def _start(config_path: str | None, cwd: Path | None, *, daemon: bool) -> None:
+    pid = start_background(config_path, cwd=cwd, daemon=daemon)
     print(f"proxy started in the background ({pid})")
 
 
@@ -132,8 +153,8 @@ def _stop() -> None:
     print(f"proxy stopped ({pid})")
 
 
-def _install(config_path: str | None) -> None:
-    command = install_autostart(config_path)
+def _install(config_path: str | None, *, daemon: bool) -> None:
+    command = install_autostart(config_path, daemon=daemon)
     print(f"logon autostart registered: {command}")
 
 
